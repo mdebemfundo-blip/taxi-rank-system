@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1026911289970",
+    "project_id": "rank-eb5b9",
+    "storage_bucket": "rank-eb5b9.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1026911289970:android:cff1532ca61cc3e56238eb",
+        "android_client_info": {
+          "package_name": "com.amaphisi.taxirank"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyARKSlyLUVZ6dJFg5QPWN-FX6Wejqw1LMc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
