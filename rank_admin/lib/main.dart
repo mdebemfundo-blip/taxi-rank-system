@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'screens/manage_routes_screen.dart';
-
+import 'screens/admin_dashboard.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(
@@ -38,7 +38,7 @@ class RankAdminApp extends StatelessWidget {
           ),
         ),
       ),
-      home: const ManageRoutesScreen(),
+      home: const AdminDashboard(),
     );
   }
 }

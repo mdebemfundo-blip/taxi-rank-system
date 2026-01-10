@@ -7,7 +7,7 @@ class ManageRoutesScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white, // ✅ CHANGED TO WHITE
+      backgroundColor: Colors.white,
       appBar: AppBar(
         title: const Text('Manage Routes'),
         backgroundColor: Colors.white,
@@ -57,10 +57,11 @@ class RouteCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final String routeEn = route['route_en'];
+    final String name = route['route_en'];
     final String status = route['status'];
     final int filled = route['seats_filled'];
     final int total = route['total_seats'];
+    final int price = route['price'];
 
     return Card(
       color: const Color(0xFF152238),
@@ -71,18 +72,17 @@ class RouteCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            /// Route + Status
+            /// Name + Status
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Expanded(
                   child: Text(
-                    routeEn,
+                    name,
                     style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white),
                   ),
                 ),
                 _StatusBadge(status: status),
@@ -91,58 +91,47 @@ class RouteCard extends StatelessWidget {
 
             const SizedBox(height: 6),
 
-            /// ✅ MORE BUTTON (NEW)
+            /// Price
+            Text(
+              'Price: R$price',
+              style: const TextStyle(color: Colors.white70),
+            ),
+
+            /// More
             Align(
               alignment: Alignment.centerRight,
               child: TextButton.icon(
                 onPressed: () => _showMore(context),
                 icon: const Icon(Icons.more_horiz, color: Colors.white70),
-                label: const Text(
-                  'More',
-                  style: TextStyle(color: Colors.white70),
-                ),
+                label: const Text('More',
+                    style: TextStyle(color: Colors.white70)),
               ),
             ),
 
-            /// Animated Seats
-            TweenAnimationBuilder<double>(
-              tween: Tween<double>(
-                begin: 0,
-                end: filled.toDouble(),
-              ),
-              duration: const Duration(milliseconds: 300),
-              builder: (_, value, __) {
-                return Text(
-                  'Seats: ${value.toInt()} / $total',
-                  style: const TextStyle(
-                    color: Colors.white70,
-                    fontSize: 15,
-                  ),
-                );
-              },
-            ),
-
-            const SizedBox(height: 14),
-
-            /// Add Passenger
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: status == 'FULL'
-                    ? null
-                    : () => _addPassenger(context),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
+            /// Seats + controls
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Seats: $filled / $total',
+                  style: const TextStyle(color: Colors.white70),
                 ),
-                child: const Text(
-                  'Add Passenger',
-                  style: TextStyle(fontSize: 16),
-                ),
-              ),
+                Row(
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.remove_circle,
+                          color: Colors.red),
+                      onPressed: filled == 0 ? null : _removePassenger,
+                    ),
+                    IconButton(
+                      icon:
+                          const Icon(Icons.add_circle, color: Colors.green),
+                      onPressed:
+                          status == 'FULL' ? null : _addPassenger,
+                    ),
+                  ],
+                )
+              ],
             ),
           ],
         ),
@@ -150,9 +139,9 @@ class RouteCard extends StatelessWidget {
     );
   }
 
-  /* ───────────────────────── ACTIONS ───────────────────────── */
+  /* ───────────────────────── PASSENGERS ───────────────────────── */
 
-  void _addPassenger(BuildContext context) async {
+  void _addPassenger() async {
     final ref = route.reference;
 
     FirebaseFirestore.instance.runTransaction((tx) async {
@@ -163,13 +152,31 @@ class RouteCard extends StatelessWidget {
       if (filled >= total) return;
 
       filled++;
-
       tx.update(ref, {
         'seats_filled': filled,
         'status': filled >= total ? 'FULL' : 'BOARDING',
       });
     });
   }
+
+  void _removePassenger() async {
+    final ref = route.reference;
+
+    FirebaseFirestore.instance.runTransaction((tx) async {
+      final snap = await tx.get(ref);
+      int filled = snap['seats_filled'];
+
+      if (filled <= 0) return;
+
+      filled--;
+      tx.update(ref, {
+        'seats_filled': filled,
+        'status': 'BOARDING',
+      });
+    });
+  }
+
+  /* ───────────────────────── MORE ───────────────────────── */
 
   void _showMore(BuildContext context) {
     showModalBottomSheet(
@@ -180,111 +187,156 @@ class RouteCard extends StatelessWidget {
       builder: (_) {
         return Padding(
           padding: const EdgeInsets.all(16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(
-                leading: const Icon(Icons.edit),
-                title: const Text('Edit Route'),
-                onTap: () {
-                  Navigator.pop(context);
-                  // TODO: open edit dialog
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.delete, color: Colors.red),
-                title: const Text('Delete Route'),
-                onTap: () async {
-                  await route.reference.delete();
-                  Navigator.pop(context);
-                },
-              ),
-            ],
-          ),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            ListTile(
+              leading: const Icon(Icons.edit),
+              title: const Text('Edit Route'),
+              onTap: () {
+                Navigator.pop(context);
+                _showEditRouteDialog(context, route);
+              },
+            ),
+            ListTile(
+              leading:
+                  const Icon(Icons.delete, color: Colors.red),
+              title: const Text('Delete Route'),
+              onTap: () async {
+                await route.reference.delete();
+                Navigator.pop(context);
+              },
+            ),
+          ]),
         );
       },
     );
   }
 }
 
-/* ───────────────────────── STATUS BADGE ───────────────────────── */
+/* ───────────────────────── EDIT / ADD ───────────────────────── */
+
+Future<void> _pickTime(
+    BuildContext context, TextEditingController c) async {
+  final time = await showTimePicker(
+    context: context,
+    initialTime: TimeOfDay.now(),
+  );
+  if (time != null) {
+    c.text = time.format(context);
+  }
+}
+
+void _showEditRouteDialog(
+    BuildContext context, QueryDocumentSnapshot route) {
+  final name =
+      TextEditingController(text: route['route_en']);
+  final price =
+      TextEditingController(text: route['price'].toString());
+  final seats =
+      TextEditingController(text: route['total_seats'].toString());
+  final time =
+      TextEditingController(text: route['depart_time']);
+
+  showDialog(
+    context: context,
+    builder: (_) => AlertDialog(
+      title: const Text('Edit Route'),
+      content: Column(mainAxisSize: MainAxisSize.min, children: [
+        _field(name, 'Route Name'),
+        _field(price, 'Price', isNumber: true),
+        _field(seats, 'Total Seats', isNumber: true),
+        TextField(
+          controller: time,
+          readOnly: true,
+          onTap: () => _pickTime(context, time),
+          decoration: const InputDecoration(labelText: 'Departure Time'),
+        ),
+      ]),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel')),
+        ElevatedButton(
+          onPressed: () async {
+            await route.reference.update({
+              'route_en': name.text,
+              'route_zu': name.text,
+              'price': int.parse(price.text),
+              'total_seats': int.parse(seats.text),
+              'depart_time': time.text,
+            });
+            Navigator.pop(context);
+          },
+          child: const Text('Save'),
+        ),
+      ],
+    ),
+  );
+}
+
+void _showAddRouteDialog(BuildContext context) {
+  final name = TextEditingController();
+  final price = TextEditingController();
+  final seats = TextEditingController(text: '15');
+  final time = TextEditingController();
+
+  showDialog(
+    context: context,
+    builder: (_) => AlertDialog(
+      title: const Text('Add Route'),
+      content: Column(mainAxisSize: MainAxisSize.min, children: [
+        _field(name, 'Route Name'),
+        _field(price, 'Price', isNumber: true),
+        _field(seats, 'Total Seats', isNumber: true),
+        TextField(
+          controller: time,
+          readOnly: true,
+          onTap: () => _pickTime(context, time),
+          decoration: const InputDecoration(labelText: 'Departure Time'),
+        ),
+      ]),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel')),
+        ElevatedButton(
+          onPressed: () async {
+            await FirebaseFirestore.instance.collection('routes').add({
+              'route_en': name.text,
+              'route_zu': name.text,
+              'price': int.parse(price.text),
+              'total_seats': int.parse(seats.text),
+              'seats_filled': 0,
+              'depart_time': time.text,
+              'status': 'BOARDING',
+              'created_at': FieldValue.serverTimestamp(),
+            });
+            Navigator.pop(context);
+          },
+          child: const Text('Save'),
+        ),
+      ],
+    ),
+  );
+}
+
+/* ───────────────────────── HELPERS ───────────────────────── */
 
 class _StatusBadge extends StatelessWidget {
   final String status;
-
   const _StatusBadge({required this.status});
 
   @override
   Widget build(BuildContext context) {
     final color = status == 'FULL' ? Colors.red : Colors.orange;
-
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.2),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Text(
-        status,
-        style: TextStyle(
-          color: color,
-          fontWeight: FontWeight.bold,
-        ),
-      ),
+          color: color.withOpacity(0.2),
+          borderRadius: BorderRadius.circular(20)),
+      child: Text(status,
+          style: TextStyle(color: color, fontWeight: FontWeight.bold)),
     );
   }
-}
-
-/* ───────────────────────── ADD ROUTE DIALOG ───────────────────────── */
-
-void _showAddRouteDialog(BuildContext context) {
-  final en = TextEditingController();
-  final zu = TextEditingController();
-  final price = TextEditingController();
-  final seats = TextEditingController(text: '15');
-  final time = TextEditingController(text: '11:30');
-
-  showDialog(
-    context: context,
-    builder: (_) {
-      return AlertDialog(
-        title: const Text('Add Route'),
-        content: SingleChildScrollView(
-          child: Column(
-            children: [
-              _field(en, 'Route (EN)'),
-              _field(zu, 'Route (ZU)'),
-              _field(price, 'Price', isNumber: true),
-              _field(seats, 'Total Seats', isNumber: true),
-              _field(time, 'Departure Time'),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              await FirebaseFirestore.instance.collection('routes').add({
-                'route_en': en.text,
-                'route_zu': zu.text,
-                'price': int.parse(price.text),
-                'total_seats': int.parse(seats.text),
-                'seats_filled': 0,
-                'depart_time': time.text,
-                'status': 'BOARDING',
-                'created_at': FieldValue.serverTimestamp(),
-              });
-              Navigator.pop(context);
-            },
-            child: const Text('Save'),
-          ),
-        ],
-      );
-    },
-  );
 }
 
 Widget _field(TextEditingController c, String label,
