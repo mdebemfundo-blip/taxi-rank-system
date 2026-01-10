@@ -25,7 +25,7 @@ jobs:
       - name: Build Board App (Flutter Web)
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.38.6.'
+          channel: stable
 
       - run: |
           cd display_screen_panel
@@ -57,7 +57,7 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.38.6.'
+         channel: stable
 
       - name: Build Admin APK
         run: |
@@ -71,3 +71,4 @@ jobs:
           name: rank-admin-apk
 
           path: manage_app/rank_manage/build/app/outputs/flutter-apk/app-release.apk
+
