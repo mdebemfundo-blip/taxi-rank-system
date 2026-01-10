@@ -85,7 +85,7 @@ class _DepartureBoardScreenState extends State<DepartureBoardScreen>
           return const Center(
             child: Text(
               "Loading routes...",
-              style: TextStyle(color: Colors.white70, fontSize: 20),
+              style: TextStyle(color: Colors.white70, fontSize: 19),
             ),
           );
         }
