@@ -1,11 +1,9 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import '../services/firebase_service.dart';
 import '../widgets/board_header.dart';
 import '../widgets/table_header.dart';
 import '../widgets/departure_row.dart';
 import '../widgets/board_footer.dart';
-import '../widgets/advert_rotator.dart';
 
 class DepartureBoardScreen extends StatefulWidget {
   const DepartureBoardScreen({super.key});
@@ -17,11 +15,11 @@ class DepartureBoardScreen extends StatefulWidget {
 class _DepartureBoardScreenState extends State<DepartureBoardScreen>
     with SingleTickerProviderStateMixin {
   final ScrollController _scrollController = ScrollController();
-
-  Timer? _scrollTimer;
   late AnimationController _blinkController;
 
   bool isEnglish = true;
+
+  static const int _loopMultiplier = 1000; // 👈 large virtual list
 
   @override
   void initState() {
@@ -32,24 +30,37 @@ class _DepartureBoardScreenState extends State<DepartureBoardScreen>
       duration: const Duration(milliseconds: 800),
     )..repeat(reverse: true);
 
-    _startAutoScroll();
+    _startInfiniteScroll();
   }
 
-  void _startAutoScroll() {
-    _scrollTimer?.cancel();
-    _scrollTimer = Timer.periodic(const Duration(milliseconds: 40), (_) {
-      if (!_scrollController.hasClients) return;
+  void _startInfiniteScroll() {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      const scrollStep = 1.0; // pixels per tick
+      const tickDuration = Duration(milliseconds: 20); // speed
 
-      final max = _scrollController.position.maxScrollExtent;
-      final offset = _scrollController.offset + 1;
+      while (mounted) {
+        if (!_scrollController.hasClients) {
+          await Future.delayed(const Duration(milliseconds: 100));
+          continue;
+        }
 
-      _scrollController.jumpTo(offset >= max ? 0 : offset);
+        final max = _scrollController.position.maxScrollExtent;
+
+        double nextOffset = _scrollController.offset + scrollStep;
+
+        if (nextOffset >= max) {
+          // move first item to end illusion
+          nextOffset = 0;
+        }
+
+        _scrollController.jumpTo(nextOffset); // small jump
+        await Future.delayed(tickDuration);
+      }
     });
   }
 
   @override
   void dispose() {
-    _scrollTimer?.cancel();
     _blinkController.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -79,7 +90,7 @@ class _DepartureBoardScreenState extends State<DepartureBoardScreen>
 
   Widget _buildRouteStream() {
     return StreamBuilder<List<Map<String, dynamic>>>(
-      stream: FirebaseService.routeStream(), // ✅ FIXED
+      stream: FirebaseService.routeStream(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(
@@ -100,15 +111,14 @@ class _DepartureBoardScreenState extends State<DepartureBoardScreen>
         }
 
         final departures = snapshot.data!;
+        final totalItems = departures.length * _loopMultiplier;
 
         return ListView.builder(
           controller: _scrollController,
-          itemCount: departures.length,
-          itemBuilder: (_, i) {
-            final d = departures[i];
-
-            final filled = d['seats_filled'] ?? 0;
-            final total = d['total_seats'] ?? 15;
+          physics: const NeverScrollableScrollPhysics(), // kiosk style
+          itemCount: totalItems,
+          itemBuilder: (_, index) {
+            final d = departures[index % departures.length];
 
             return DepartureRow(
               route: isEnglish
@@ -117,7 +127,7 @@ class _DepartureBoardScreenState extends State<DepartureBoardScreen>
               status: d['status'] ?? 'WAITING',
               seats: '${d['seats_filled'] ?? 0} / ${d['total_seats'] ?? 15}',
               time: d['depart_time'] ?? '--:--',
-              price: d['price'] ?? 0, // pass to widget
+              price: d['price'] ?? 0,
               blinkController: _blinkController,
             );
           },
