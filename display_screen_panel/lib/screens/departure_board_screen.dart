@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/firebase_service.dart';
 import '../widgets/board_header.dart';
+import '../widgets/slidefooter_adds.dart';
 import '../widgets/table_header.dart';
 import '../widgets/departure_row.dart';
 import '../widgets/board_footer.dart';
@@ -79,7 +80,7 @@ class _DepartureBoardScreenState extends State<DepartureBoardScreen>
             ),
             const TableHeader(),
             Expanded(child: _buildRouteStream()),
-            BoardFooter(isEnglish: isEnglish),
+            const SlidingAdsFooter(),
           ],
         ),
       ),
