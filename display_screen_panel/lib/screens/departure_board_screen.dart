@@ -1,10 +1,11 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../services/firebase_service.dart';
 import '../widgets/board_header.dart';
-import '../widgets/slidefooter_adds.dart';
 import '../widgets/table_header.dart';
 import '../widgets/departure_row.dart';
 import '../widgets/board_footer.dart';
+import '../widgets/ads_bottom_sheet.dart';
 
 class DepartureBoardScreen extends StatefulWidget {
   const DepartureBoardScreen({super.key});
@@ -16,11 +17,16 @@ class DepartureBoardScreen extends StatefulWidget {
 class _DepartureBoardScreenState extends State<DepartureBoardScreen>
     with SingleTickerProviderStateMixin {
   final ScrollController _scrollController = ScrollController();
+
+  Timer? _scrollTimer;
   late AnimationController _blinkController;
 
   bool isEnglish = true;
 
-  static const int _loopMultiplier = 1000; // 👈 large virtual list
+  bool _autoScrollStarted = false;
+
+  // ✅ REQUIRED LIST SIZE BEFORE SCROLLING
+  static const int _minItemsForScroll = 10;
 
   @override
   void initState() {
@@ -30,42 +36,49 @@ class _DepartureBoardScreenState extends State<DepartureBoardScreen>
       vsync: this,
       duration: const Duration(milliseconds: 800),
     )..repeat(reverse: true);
-
-    _startInfiniteScroll();
-  }
-
-  void _startInfiniteScroll() {
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      const scrollStep = 1.0; // pixels per tick
-      const tickDuration = Duration(milliseconds: 20); // speed
-
-      while (mounted) {
-        if (!_scrollController.hasClients) {
-          await Future.delayed(const Duration(milliseconds: 100));
-          continue;
-        }
-
-        final max = _scrollController.position.maxScrollExtent;
-
-        double nextOffset = _scrollController.offset + scrollStep;
-
-        if (nextOffset >= max) {
-          // move first item to end illusion
-          nextOffset = 0;
-        }
-
-        _scrollController.jumpTo(nextOffset); // small jump
-        await Future.delayed(tickDuration);
-      }
-    });
   }
 
   @override
   void dispose() {
+    _scrollTimer?.cancel();
     _blinkController.dispose();
     _scrollController.dispose();
     super.dispose();
   }
+
+  // ───────────────────────── AUTO SCROLL ─────────────────────────
+
+  void _startAutoScroll() {
+    _autoScrollStarted = true;
+    _scrollTimer?.cancel();
+
+    _scrollTimer = Timer.periodic(
+      const Duration(milliseconds: 40),
+      (_) {
+        if (!_scrollController.hasClients) return;
+
+        final max = _scrollController.position.maxScrollExtent;
+        final offset = _scrollController.offset + 1;
+
+        if (offset >= max) {
+          _scrollController.jumpTo(0);
+        } else {
+          _scrollController.jumpTo(offset);
+        }
+      },
+    );
+  }
+
+  void _stopAutoScroll() {
+    _autoScrollStarted = false;
+    _scrollTimer?.cancel();
+
+    if (_scrollController.hasClients) {
+      _scrollController.jumpTo(0);
+    }
+  }
+
+  // ───────────────────────── UI ─────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -80,20 +93,22 @@ class _DepartureBoardScreenState extends State<DepartureBoardScreen>
             ),
             const TableHeader(),
             Expanded(child: _buildRouteStream()),
-            const SlidingAdsFooter(),
+            BoardFooter(isEnglish: isEnglish),
+            const AdsBottomSheet(visible: true),
           ],
         ),
       ),
     );
   }
 
-  // ================= STREAMED ROUTES =================
+  // ───────────────────────── ROUTE STREAM ─────────────────────────
 
   Widget _buildRouteStream() {
     return StreamBuilder<List<Map<String, dynamic>>>(
       stream: FirebaseService.routeStream(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
+          _stopAutoScroll();
           return const Center(
             child: Text(
               "Loading routes...",
@@ -103,6 +118,7 @@ class _DepartureBoardScreenState extends State<DepartureBoardScreen>
         }
 
         if (!snapshot.hasData || snapshot.data!.isEmpty) {
+          _stopAutoScroll();
           return const Center(
             child: Text(
               "No departures available",
@@ -112,21 +128,32 @@ class _DepartureBoardScreenState extends State<DepartureBoardScreen>
         }
 
         final departures = snapshot.data!;
-        final totalItems = departures.length * _loopMultiplier;
+
+        // ✅ START auto-scroll ONLY if list has 10+ items
+        if (departures.length >= _minItemsForScroll &&
+            !_autoScrollStarted) {
+          _startAutoScroll();
+        }
+
+        // ⛔ STOP auto-scroll if list drops below 10
+        if (departures.length < _minItemsForScroll &&
+            _autoScrollStarted) {
+          _stopAutoScroll();
+        }
 
         return ListView.builder(
           controller: _scrollController,
-          physics: const NeverScrollableScrollPhysics(), // kiosk style
-          itemCount: totalItems,
-          itemBuilder: (_, index) {
-            final d = departures[index % departures.length];
+          itemCount: departures.length,
+          itemBuilder: (_, i) {
+            final d = departures[i];
 
             return DepartureRow(
               route: isEnglish
                   ? d['route_en'] ?? 'Unknown Route'
                   : d['route_zu'] ?? 'Umzila Ongaziwa',
               status: d['status'] ?? 'WAITING',
-              seats: '${d['seats_filled'] ?? 0} / ${d['total_seats'] ?? 15}',
+              seats:
+                  '${d['seats_filled'] ?? 0} / ${d['total_seats'] ?? 15}',
               time: d['depart_time'] ?? '--:--',
               price: d['price'] ?? 0,
               blinkController: _blinkController,
