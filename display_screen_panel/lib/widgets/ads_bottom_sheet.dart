@@ -14,6 +14,8 @@ class _AdsBottomSheetState extends State<AdsBottomSheet> {
   final List<String> ads = [
     'assets/ads/ad1.jpg',
     'assets/ads/ad2.jpg',
+	'assets/ads/ad3.jpg',
+    'assets/ads/ad4.jpg',
   ];
 
   int index = 0;

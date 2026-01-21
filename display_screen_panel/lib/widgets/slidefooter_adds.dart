@@ -32,6 +32,16 @@ class _SlidingAdsFooterState extends State<SlidingAdsFooter> {
       title: 'Quick Eats',
       subtitle: 'Hot meals on the move',
     ),
+	 _AdItem(
+      image: 'assets/ads/ad3.png',
+      title: 'Quick Eats',
+      subtitle: 'Hot meals on the move',
+    ),
+	 _AdItem(
+      image: 'assets/ads/ad4.png',
+      title: 'Quick Eats',
+      subtitle: 'Hot meals on the move',
+    ),
   ];
 
   final List<String> announcements = [

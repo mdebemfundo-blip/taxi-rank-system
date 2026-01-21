@@ -46,7 +46,7 @@ class DepartureRow extends StatelessWidget {
             flex: 4,
             child: Text(
               route,
-              style: const TextStyle(color: Colors.white, fontSize: 20),
+              style: const TextStyle(color: Colors.white, fontSize: 40),
             ),
           ),
 

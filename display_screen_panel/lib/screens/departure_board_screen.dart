@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../services/firebase_service.dart';
 import '../widgets/board_header.dart';
@@ -18,68 +19,85 @@ class _DepartureBoardScreenState extends State<DepartureBoardScreen>
   final ScrollController _scrollController = ScrollController();
   late AnimationController _blinkController;
 
-  bool isEnglish = true;
+  Timer? _scrollTimer;
+  bool _isScrolling = false;
 
-  static const int _loopMultiplier = 1000; // 👈 large virtual list
+  bool isEnglish = true;
 
   @override
   void initState() {
     super.initState();
 
+    // Blink starts immediately
     _blinkController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 800),
     )..repeat(reverse: true);
-
-    _startInfiniteScroll();
   }
 
-  void _startInfiniteScroll() {
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      const scrollStep = 1.0; // pixels per tick
-      const tickDuration = Duration(milliseconds: 20); // speed
+  void _startAutoScroll() {
+    if (_isScrolling) return;
 
-      while (mounted) {
-        if (!_scrollController.hasClients) {
-          await Future.delayed(const Duration(milliseconds: 100));
-          continue;
-        }
+    _isScrolling = true;
+    _scrollTimer = Timer.periodic(const Duration(milliseconds: 40), (_) {
+      if (!_scrollController.hasClients) return;
 
-        final max = _scrollController.position.maxScrollExtent;
+      final max = _scrollController.position.maxScrollExtent;
+      double nextOffset = _scrollController.offset + 1;
 
-        double nextOffset = _scrollController.offset + scrollStep;
-
-        if (nextOffset >= max) {
-          // move first item to end illusion
-          nextOffset = 0;
-        }
-
-        _scrollController.jumpTo(nextOffset); // small jump
-        await Future.delayed(tickDuration);
+      if (nextOffset >= max) {
+        nextOffset = 0;
       }
+
+      _scrollController.jumpTo(nextOffset);
     });
+  }
+
+  void _stopAutoScroll() {
+    _scrollTimer?.cancel();
+    _isScrolling = false;
   }
 
   @override
   void dispose() {
     _blinkController.dispose();
     _scrollController.dispose();
+    _stopAutoScroll();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    // responsive font sizes
+    final screenWidth = MediaQuery.of(context).size.width;
+    final screenHeight = MediaQuery.of(context).size.height;
+
+    final bool isSmallScreen = screenWidth < 600;
+
     return Scaffold(
       backgroundColor: Colors.black,
       body: SafeArea(
         child: Column(
           children: [
-            BoardHeader(
-              isEnglish: isEnglish,
-              onToggle: (v) => setState(() => isEnglish = v),
+            // Header
+            SizedBox(
+              height: screenHeight * 0.12,
+              child: BoardHeader(
+                isEnglish: isEnglish,
+                onToggle: (v) => setState(() => isEnglish = v),
+              ),
             ),
-            const TableHeader(),
-            Expanded(child: _buildRouteStream()),
+
+            // Table header
+            SizedBox(
+              height: screenHeight * 0.08,
+              child: const TableHeader(),
+            ),
+
+            // Route list
+            Expanded(child: _buildRouteStream(isSmallScreen)),
+
+            // Ads footer
             const SlidingAdsFooter(),
           ],
         ),
@@ -87,9 +105,7 @@ class _DepartureBoardScreenState extends State<DepartureBoardScreen>
     );
   }
 
-  // ================= STREAMED ROUTES =================
-
-  Widget _buildRouteStream() {
+  Widget _buildRouteStream(bool isSmallScreen) {
     return StreamBuilder<List<Map<String, dynamic>>>(
       stream: FirebaseService.routeStream(),
       builder: (context, snapshot) {
@@ -103,6 +119,7 @@ class _DepartureBoardScreenState extends State<DepartureBoardScreen>
         }
 
         if (!snapshot.hasData || snapshot.data!.isEmpty) {
+          _stopAutoScroll(); // no scroll
           return const Center(
             child: Text(
               "No departures available",
@@ -112,24 +129,42 @@ class _DepartureBoardScreenState extends State<DepartureBoardScreen>
         }
 
         final departures = snapshot.data!;
-        final totalItems = departures.length * _loopMultiplier;
 
-        return ListView.builder(
-          controller: _scrollController,
-          physics: const NeverScrollableScrollPhysics(), // kiosk style
-          itemCount: totalItems,
-          itemBuilder: (_, index) {
-            final d = departures[index % departures.length];
+        return LayoutBuilder(
+          builder: (context, constraints) {
+            // responsive item height based on screen
+            final itemHeight = isSmallScreen ? 90.0 : 110.0;
 
-            return DepartureRow(
-              route: isEnglish
-                  ? d['route_en'] ?? 'Unknown Route'
-                  : d['route_zu'] ?? 'Umzila Ongaziwa',
-              status: d['status'] ?? 'WAITING',
-              seats: '${d['seats_filled'] ?? 0} / ${d['total_seats'] ?? 15}',
-              time: d['depart_time'] ?? '--:--',
-              price: d['price'] ?? 0,
-              blinkController: _blinkController,
+            final estimatedHeight = departures.length * itemHeight;
+
+            if (estimatedHeight > constraints.maxHeight) {
+              _startAutoScroll();
+            } else {
+              _stopAutoScroll();
+            }
+
+            return ListView.builder(
+              controller: _scrollController,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: departures.length,
+              itemBuilder: (_, index) {
+                final d = departures[index];
+
+                return SizedBox(
+                  height: itemHeight,
+                  child: DepartureRow(
+                    route: isEnglish
+                        ? d['route_en'] ?? 'Unknown Route'
+                        : d['route_zu'] ?? 'Umzila Ongaziwa',
+                    status: d['status'] ?? 'WAITING',
+                    seats:
+                        '${d['seats_filled'] ?? 0} / ${d['total_seats'] ?? 15}',
+                    time: d['depart_time'] ?? '--:--',
+                    price: d['price'] ?? 0,
+                    blinkController: _blinkController,
+                  ),
+                );
+              },
             );
           },
         );

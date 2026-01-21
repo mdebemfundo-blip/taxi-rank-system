@@ -101,7 +101,7 @@ class RouteCard extends StatelessWidget {
             Align(
               alignment: Alignment.centerRight,
               child: TextButton.icon(
-                onPressed: () => _showMore(context),
+                onPressed: () => _showMore(context, route),
                 icon: const Icon(Icons.more_horiz, color: Colors.white70),
                 label: const Text('More',
                     style: TextStyle(color: Colors.white70)),
@@ -121,13 +121,13 @@ class RouteCard extends StatelessWidget {
                     IconButton(
                       icon: const Icon(Icons.remove_circle,
                           color: Colors.red),
-                      onPressed: filled == 0 ? null : _removePassenger,
+                      onPressed: filled == 0 ? null : () => _removePassenger(route),
                     ),
                     IconButton(
                       icon:
                           const Icon(Icons.add_circle, color: Colors.green),
                       onPressed:
-                          status == 'FULL' ? null : _addPassenger,
+                          status == 'FULL' ? null : () => _addPassenger(route),
                     ),
                   ],
                 )
@@ -141,7 +141,7 @@ class RouteCard extends StatelessWidget {
 
   /* ───────────────────────── PASSENGERS ───────────────────────── */
 
-  void _addPassenger() async {
+  void _addPassenger(QueryDocumentSnapshot route) async {
     final ref = route.reference;
 
     FirebaseFirestore.instance.runTransaction((tx) async {
@@ -159,7 +159,7 @@ class RouteCard extends StatelessWidget {
     });
   }
 
-  void _removePassenger() async {
+  void _removePassenger(QueryDocumentSnapshot route) async {
     final ref = route.reference;
 
     FirebaseFirestore.instance.runTransaction((tx) async {
@@ -178,7 +178,7 @@ class RouteCard extends StatelessWidget {
 
   /* ───────────────────────── MORE ───────────────────────── */
 
-  void _showMore(BuildContext context) {
+  void _showMore(BuildContext context, QueryDocumentSnapshot route) {
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
@@ -226,7 +226,8 @@ Future<void> _pickTime(
 }
 
 void _showEditRouteDialog(
-    BuildContext context, QueryDocumentSnapshot route) {
+    BuildContext context, QueryDocumentSnapshot route) async {
+
   final name =
       TextEditingController(text: route['route_en']);
   final price =
@@ -236,12 +237,23 @@ void _showEditRouteDialog(
   final time =
       TextEditingController(text: route['depart_time']);
 
+  // Get route list from firestore
+  final routesSnapshot = await FirebaseFirestore.instance.collection('routes').get();
+  final routeNames = routesSnapshot.docs
+      .map((d) => d['route_en'].toString())
+      .toList();
+
   showDialog(
     context: context,
     builder: (_) => AlertDialog(
       title: const Text('Edit Route'),
       content: Column(mainAxisSize: MainAxisSize.min, children: [
-        _field(name, 'Route Name'),
+        RouteDropdownField(
+          label: 'Route Name',
+          routes: routeNames,
+          initialValue: name.text,
+          onChanged: (v) => name.text = v,
+        ),
         _field(price, 'Price', isNumber: true),
         _field(seats, 'Total Seats', isNumber: true),
         TextField(
@@ -273,18 +285,29 @@ void _showEditRouteDialog(
   );
 }
 
-void _showAddRouteDialog(BuildContext context) {
+void _showAddRouteDialog(BuildContext context) async {
   final name = TextEditingController();
   final price = TextEditingController();
   final seats = TextEditingController(text: '15');
   final time = TextEditingController();
+
+  // Get route list from firestore
+  final routesSnapshot = await FirebaseFirestore.instance.collection('routes').get();
+  final routeNames = routesSnapshot.docs
+      .map((d) => d['route_en'].toString())
+      .toList();
 
   showDialog(
     context: context,
     builder: (_) => AlertDialog(
       title: const Text('Add Route'),
       content: Column(mainAxisSize: MainAxisSize.min, children: [
-        _field(name, 'Route Name'),
+        RouteDropdownField(
+          label: 'Route Name',
+          routes: routeNames,
+          initialValue: null,
+          onChanged: (v) => name.text = v,
+        ),
         _field(price, 'Price', isNumber: true),
         _field(seats, 'Total Seats', isNumber: true),
         TextField(
@@ -352,4 +375,110 @@ Widget _field(TextEditingController c, String label,
       ),
     ),
   );
+}
+
+/* ───────────────────────── ROUTE DROPDOWN SEARCH FIELD ───────────────────────── */
+
+class RouteDropdownField extends StatefulWidget {
+  final String? initialValue;
+  final List<String> routes;
+  final Function(String) onChanged;
+  final String label;
+
+  const RouteDropdownField({
+    Key? key,
+    this.initialValue,
+    required this.routes,
+    required this.onChanged,
+    required this.label,
+  }) : super(key: key);
+
+  @override
+  State<RouteDropdownField> createState() => _RouteDropdownFieldState();
+}
+
+class _RouteDropdownFieldState extends State<RouteDropdownField> {
+  late TextEditingController _controller;
+  late TextEditingController _searchController;
+  late List<String> _filteredRoutes;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.initialValue ?? '');
+    _searchController = TextEditingController();
+    _filteredRoutes = widget.routes;
+  }
+
+  void _openDropdown() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) {
+        return StatefulBuilder(
+          builder: (context, setStateModal) {
+            return Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: _searchController,
+                    decoration: const InputDecoration(
+                      labelText: 'Search Route',
+                      prefixIcon: Icon(Icons.search),
+                    ),
+                    onChanged: (value) {
+                      setStateModal(() {
+                        _filteredRoutes = widget.routes
+                            .where((r) => r.toLowerCase().contains(value.toLowerCase()))
+                            .toList();
+                      });
+                    },
+                  ),
+                  const SizedBox(height: 10),
+                  SizedBox(
+                    height: 250,
+                    child: ListView.builder(
+                      itemCount: _filteredRoutes.length,
+                      itemBuilder: (_, index) {
+                        final route = _filteredRoutes[index];
+                        return ListTile(
+                          title: Text(route),
+                          onTap: () {
+                            _controller.text = route;
+                            widget.onChanged(route);
+                            Navigator.pop(context);
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: _openDropdown,
+      child: AbsorbPointer(
+        child: TextField(
+          controller: _controller,
+          decoration: InputDecoration(
+            labelText: widget.label,
+            suffixIcon: const Icon(Icons.arrow_drop_down),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
